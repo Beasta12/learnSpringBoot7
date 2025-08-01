@@ -16,14 +16,14 @@ public class CategoryRepositoryTest {
     @Autowired
     CategoryRepository categoryRepository;
 
-//    @Test
-//    void insert(){
-//        Category category = new Category();
-//        category.setName("GADGET");
-//        categoryRepository.save(category);
-//
-//        Assertions.assertNotNull(category.getId());
-//    }
+    @Test
+    void insert(){
+        Category category = new Category();
+        category.setName("GADGET");
+        categoryRepository.save(category);
+
+        Assertions.assertNotNull(category.getId());
+    }
 
     @Test
     void update(){
