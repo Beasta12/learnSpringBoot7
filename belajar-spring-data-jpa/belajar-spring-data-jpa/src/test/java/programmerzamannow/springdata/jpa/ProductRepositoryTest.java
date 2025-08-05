@@ -4,17 +4,18 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.*;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.transaction.support.TransactionOperations;
 import programmerzamannow.springdata.jpa.entity.Category;
 import programmerzamannow.springdata.jpa.entity.Product;
+import programmerzamannow.springdata.jpa.model.ProductPrice;
+import programmerzamannow.springdata.jpa.model.SimpleProduct;
 import programmerzamannow.springdata.jpa.repository.CategoryRepository;
 import programmerzamannow.springdata.jpa.repository.ProductRepository;
 
 import java.util.List;
+import java.util.stream.Stream;
 
 @SpringBootTest
 public class ProductRepositoryTest {
@@ -71,6 +72,7 @@ public class ProductRepositoryTest {
         Assertions.assertEquals("Apple iPhone 13 Pro Max", products.get(0).getName());
         Assertions.assertEquals("Apple iPhone 14 Pro Max", products.get(1).getName());
     }
+
     @Test
     void findProductPageable() {
         Pageable pageable = PageRequest.of(0, 1, Sort.by(Sort.Order.desc("id")));
@@ -120,8 +122,128 @@ public class ProductRepositoryTest {
             int delete = productRepository.deleteByName("Samsung Galaxy S9");
             Assertions.assertEquals(1, delete);
 
-            delete  = productRepository.deleteByName("Samsung Galaxy S9");
+            delete = productRepository.deleteByName("Samsung Galaxy S9");
             Assertions.assertEquals(0, delete);
         });
+    }
+
+    @Test
+    void stream() {
+        transactionOperations.executeWithoutResult(transactionStatus -> {
+            Category category = categoryRepository.findById(1L).orElse(null);
+            Assertions.assertNotNull(category);
+
+            Stream<Product> stream = productRepository.streamAllByCategory(category);
+            stream.forEach((product -> System.out.println(product.getId() + " : " + product.getName())));
+        });
+    }
+
+    @Test
+    void slice() {
+        Pageable pageable = PageRequest.of(0, 1);
+        Category category = categoryRepository.findById(1L).orElse(null);
+        Assertions.assertNotNull(category);
+
+        Slice<Product> slice = productRepository.findAllByCategory(category, pageable);
+        while (slice.hasNext()) {
+            slice = productRepository.findAllByCategory(category, slice.nextPageable());
+        }
+    }
+
+    @Test
+    void lock1() {
+        transactionOperations.executeWithoutResult(transactionStatus -> {
+            try {
+                Product product = productRepository.findFirstByIdEquals(1L).orElse(null);
+                Assertions.assertNotNull(product);
+
+                product.setPrice(30_000_000L);
+                Thread.sleep(20_000L);
+                productRepository.save(product);
+            } catch (InterruptedException exception) {
+                throw new RuntimeException(exception);
+            }
+        });
+    }
+
+    @Test
+    void lock2() {
+        transactionOperations.executeWithoutResult(transactionStatus -> {
+            Product product = productRepository.findFirstByIdEquals(1L).orElse(null);
+            Assertions.assertNotNull(product);
+            product.setPrice(10_000_000L);
+            productRepository.save(product);
+        });
+    }
+
+    @Test
+    void audit() {
+        Category category = new Category();
+        category.setName("Sample Audit");
+        categoryRepository.save(category);
+
+        Assertions.assertNotNull(category.getId());
+        Assertions.assertNotNull(category.getCreatedDate());
+        Assertions.assertNotNull(category.getLastModifiedDate());
+    }
+
+    @Test
+    void example() {
+        Category category = new Category();
+        category.setName("GADGET MURAH");
+
+        Example<Category> example = Example.of(category);
+
+        List<Category> categories = categoryRepository.findAll(example);
+        Assertions.assertEquals(1, categories.size());
+    }
+
+    @Test
+    void example2() {
+        Category category = new Category();
+        category.setName("GADGET MURAH");
+        category.setId(1L);
+
+        Example<Category> example = Example.of(category);
+
+        List<Category> categories = categoryRepository.findAll(example);
+        Assertions.assertEquals(1, categories.size());
+    }
+
+    @Test
+    void exampleMatcher() {
+        Category category = new Category();
+        category.setName("gadget MURAH");
+
+        ExampleMatcher matcher = ExampleMatcher.matching().withIgnoreNullValues().withIgnoreCase();
+
+        Example<Category> example = Example.of(category, matcher);
+
+        List<Category> categories = categoryRepository.findAll(example);
+        Assertions.assertEquals(1, categories.size());
+    }
+
+    @Test
+    void specification() {
+        Specification<Product> specification = (root, criteriaQuery, criteriaBuilder) -> {
+            return criteriaQuery.where(
+                    criteriaBuilder.or(
+                            criteriaBuilder.equal(root.get("name"), "Apple iPhone 14 Pro Max"),
+                            criteriaBuilder.equal(root.get("name"), "Apple iPhone 13 Pro Max")
+                    )
+            ).getRestriction();
+        };
+
+        List<Product> products = productRepository.findAll(specification);
+        Assertions.assertEquals(2, products.size());
+    }
+
+    @Test
+    void projection() {
+        List<SimpleProduct> simpleProducts = productRepository.findAllByNameLike("%Apple%", SimpleProduct.class);
+        Assertions.assertEquals(2, simpleProducts.size());
+
+        List<ProductPrice> productPrices = productRepository.findAllByNameLike("%Apple%", ProductPrice.class);
+        Assertions.assertEquals(2, productPrices.size());
     }
 }
