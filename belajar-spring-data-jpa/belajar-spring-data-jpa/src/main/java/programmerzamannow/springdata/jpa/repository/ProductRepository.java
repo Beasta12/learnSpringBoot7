@@ -8,8 +8,12 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import programmerzamannow.springdata.jpa.entity.Category;
+import org.springframework.transaction.annotation.Transactional;
 import programmerzamannow.springdata.jpa.entity.Product;
 import programmerzamannow.springdata.jpa.model.SimpleProduct;
 
@@ -30,7 +34,24 @@ public interface ProductRepository extends JpaRepository<Product, Long>, JpaSpec
 
     boolean existsByName(String name);
 
+    @Transactional
     int deleteByName(String name);
+
+    List<Product> searchProductUsingName(@Param("name")  String name, Pageable pageable);
+
+    @Query(
+            value = "SELECT p FROM Product p WHERE p.name LIKE :name or p.category.name LIKE :name",
+            countQuery = "SELECT COUNT(p) FROM Product p WHERE p.name LIKE :name or p.category.name LIKE :name"
+    )
+    Page<Product> searchProduct(@Param("name") String name, Pageable pageable);
+
+    @Modifying
+    @Query(value = "DELETE FROM Product p WHERE p.name = :name")
+    int deleteProductUsingName(@Param("name") String name);
+
+    @Modifying
+    @Query(value = "UPDATE Product p SET p.price = 0 WHERE p.id = :id")
+    int updateProductUsingId(@Param("id") Long id);
 
     Stream<Product> streamAllByCategory(Category category);
 
